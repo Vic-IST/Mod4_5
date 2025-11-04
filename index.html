@@ -9,6 +9,10 @@
 <body>
 
   <div class="quiz-card">
+    <div class="dataset-switcher">
+      <button class="control-btn dataset-btn" data-key="mod4_5">Module 4-5 Quiz</button>
+      <button class="control-btn dataset-btn" data-key="definitions">Definitions Quiz</button>
+    </div>
     <div id="quizContainer">
       <div class="question" id="qText"></div>
       <div class="choices" id="qChoices"></div>
@@ -16,14 +20,16 @@
     </div>
 
     <div class="controls">
-      <button id="prevBtn">Previous</button>
-      <button id="nextBtn">Next</button>
+      <button class="control-btn" id="prevBtn">Previous</button>
+      <button class="control-btn" id="nextBtn">Next</button>
     </div>
   </div>
 
   <script src="questions.js"></script>
+  <script src="deffs.js"></script>
   <script>
     let idx = 0;
+    let quizQuestions = [];
     const answers = [];
     const choiceOrder = [];
 
@@ -32,6 +38,7 @@
     const qExplain = document.getElementById('qExplain');
     const prevBtn  = document.getElementById('prevBtn');
     const nextBtn  = document.getElementById('nextBtn');
+    const datasetButtons = document.querySelectorAll('.dataset-btn');
 
     function shuffle(array) {
       const copy = [...array];
@@ -42,29 +49,48 @@
       return copy;
     }
 
-    
     function showQuestion() {
-      const q = questions[idx];
+      if (!quizQuestions.length) {
+        qText.textContent = 'Select a quiz set to begin.';
+        qChoices.innerHTML = '';
+        qExplain.textContent = '';
+        qExplain.className = 'explanation';
+        prevBtn.disabled = true;
+        nextBtn.disabled = true;
+        return;
+      }
+
+      const q = quizQuestions[idx];
+      const isMulti = Array.isArray(q.answer);
       if (answers[idx] === undefined) {
-        answers[idx] = null;                   // preserve answer or null
+        answers[idx] = isMulti ? [] : null;    // initialize answer storage
+      }
+      if (isMulti && !Array.isArray(answers[idx])) {
+        answers[idx] = [];
       }
       const order = choiceOrder[idx] || (choiceOrder[idx] =
         shuffle(Array.from({ length: q.choices.length }, (_, i) => i)));
       qText.textContent = '';
 
-      const numberSpan = document.createElement('span');
-      numberSpan.className = 'question-number';
-      numberSpan.textContent = `Question ${idx + 1}`;
+      const numberBlock = document.createElement('div');
+      numberBlock.className = 'question-number';
+      numberBlock.textContent = `Question ${idx + 1}`;
 
-      const textSpan = document.createElement('span');
-      textSpan.className = 'question-text';
-      textSpan.textContent = q.q;
+      const textBlock = document.createElement('div');
+      textBlock.className = 'question-text';
+      textBlock.textContent = q.q;
 
-      qText.appendChild(numberSpan);
-      qText.appendChild(textSpan);
+      qText.appendChild(numberBlock);
+      qText.appendChild(textBlock);
       qChoices.innerHTML  = '';
       qExplain.textContent = '';
       qExplain.className = 'explanation';
+      if (isMulti) {
+        const note = document.createElement('div');
+        note.className = 'multi-select-note';
+        note.textContent = `Select ${q.answer.length} answers.`;
+        qChoices.appendChild(note);
+      }
 
       order.forEach((originalIndex, displayIdx) => {
         const choice = q.choices[originalIndex];
@@ -76,10 +102,31 @@
         label.appendChild(document.createTextNode(`${letter}) ${choice}`));
 
         const selectChoice = () => {
-          answers[idx] = originalIndex;
-          [...qChoices.children].forEach((child) => child.classList.remove('selected'));
-          label.classList.add('selected');
-          showExplanation();
+          if (isMulti) {
+            const current = Array.isArray(answers[idx]) ? [...answers[idx]] : [];
+            const selectedIdx = current.indexOf(originalIndex);
+            if (selectedIdx >= 0) {
+              current.splice(selectedIdx, 1);
+            } else {
+              if (current.length >= q.answer.length) {
+                qExplain.textContent = `Only ${q.answer.length} answers can be selected.`;
+                qExplain.classList.remove('correct', 'wrong');
+                return;
+              }
+              current.push(originalIndex);
+            }
+            answers[idx] = current;
+            qChoices.querySelectorAll('label').forEach((child) => {
+              const childIndex = Number(child.dataset.choiceIndex);
+              child.classList.toggle('selected', current.includes(childIndex));
+            });
+            showExplanation();
+          } else {
+            answers[idx] = originalIndex;
+            qChoices.querySelectorAll('label').forEach((child) => child.classList.remove('selected'));
+            label.classList.add('selected');
+            showExplanation();
+          }
         };
 
         label.addEventListener('click', selectChoice);
@@ -90,14 +137,18 @@
           }
         });
 
-        if (answers[idx] === originalIndex) {
+        if (isMulti) {
+          if (Array.isArray(answers[idx]) && answers[idx].includes(originalIndex)) {
+            label.classList.add('selected');
+          }
+        } else if (answers[idx] === originalIndex) {
           label.classList.add('selected');
         }
         qChoices.appendChild(label);
       });
 
       prevBtn.disabled = (idx === 0);
-      nextBtn.disabled = (idx === questions.length - 1);
+      nextBtn.disabled = (idx === quizQuestions.length - 1);
 
       if (answers[idx] !== null && answers[idx] !== undefined) {
         showExplanation();
@@ -105,13 +156,55 @@
     }
 
     function showExplanation() {
-      const q    = questions[idx];
+      const q    = quizQuestions[idx];
       const ans  = answers[idx];
+      const baseExplain = q.explain || '';
+      const isMulti = Array.isArray(q.answer);
+
+      qExplain.classList.remove('correct', 'wrong');
+
+      if (isMulti) {
+        if (!Array.isArray(ans) || ans.length === 0) {
+          qExplain.textContent = '';
+          return;
+        }
+        if (ans.length < q.answer.length) {
+          qExplain.textContent = `Select ${q.answer.length} answers to check.`;
+          return;
+        }
+        const uniqueSelections = Array.from(new Set(ans));
+        if (uniqueSelections.length !== q.answer.length) {
+          qExplain.textContent = `Only ${q.answer.length} answers can be selected.`;
+          return;
+        }
+        const sortedSelections = [...uniqueSelections].sort((a, b) => a - b);
+        const sortedCorrect = [...q.answer].sort((a, b) => a - b);
+        const isCorrect = sortedSelections.every((value, index) => value === sortedCorrect[index]);
+
+        if (isCorrect) {
+          qExplain.textContent = baseExplain ? 'Correct. ' + baseExplain : 'Correct!';
+          qExplain.classList.add('correct');
+        } else {
+          const wrongSelections = sortedSelections.filter((value) => !sortedCorrect.includes(value));
+          let detail = '';
+          if (wrongSelections.length && q.why_others_are_not_correct) {
+            detail = wrongSelections
+              .map((choiceIdx) => q.why_others_are_not_correct[choiceIdx])
+              .filter(Boolean)
+              .map((text) => text.trim())
+              .join(' ');
+          }
+          const fallback = baseExplain || 'Review the options and try again.';
+          qExplain.textContent = 'Not quite. ' + (detail || fallback);
+          qExplain.classList.add('wrong');
+        }
+        return;
+      }
+
       if (ans === null || ans === undefined) return;
 
       const isCorrect = ans === q.answer;
       const distractorExplain = q.why_others_are_not_correct ? q.why_others_are_not_correct[ans] : '';
-      const baseExplain = q.explain || '';
 
       let message = '';
       if (isCorrect) {
@@ -129,6 +222,31 @@
       qExplain.classList.toggle('wrong', !isCorrect);
     }
 
+    function loadDataset(key) {
+      if (!window.quizBanks || !Array.isArray(window.quizBanks[key])) {
+        qText.textContent = 'Selected quiz set is unavailable.';
+        qChoices.innerHTML = '';
+        qExplain.textContent = '';
+        qExplain.className = 'explanation';
+        prevBtn.disabled = true;
+        nextBtn.disabled = true;
+        return;
+      }
+
+      idx = 0;
+      quizQuestions = shuffle(window.quizBanks[key].slice());
+      answers.length = 0;
+      choiceOrder.length = 0;
+      showQuestion();
+    }
+
+    datasetButtons.forEach((button) => {
+      button.addEventListener('click', () => {
+        datasetButtons.forEach((btn) => btn.classList.toggle('active', btn === button));
+        loadDataset(button.dataset.key);
+      });
+    });
+
     prevBtn.addEventListener('click', () => {
       if (idx > 0) {
         idx--; showQuestion();
@@ -136,12 +254,17 @@
     });
 
     nextBtn.addEventListener('click', () => {
-      if (idx < questions.length - 1) {
+      if (idx < quizQuestions.length - 1) {
         idx++; showQuestion();
       }
     });
 
-    showQuestion();
+    if (datasetButtons.length) {
+      datasetButtons[0].classList.add('active');
+      loadDataset(datasetButtons[0].dataset.key);
+    } else {
+      showQuestion();
+    }
   </script>
 
 </body>
