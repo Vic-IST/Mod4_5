@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Quiz</title>
+  <link rel="stylesheet" href="quiz.css"/>
+</head>
+<body>
+
+  <div class="quiz-card">
+    <div id="quizContainer">
+      <div class="question" id="qText"></div>
+      <div class="choices" id="qChoices"></div>
+      <div class="explanation" id="qExplain"></div>
+    </div>
+
+    <div class="controls">
+      <button id="prevBtn">Previous</button>
+      <button id="nextBtn">Next</button>
+    </div>
+  </div>
+
+  <script src="questions.js"></script>
+  <script>
+    let idx = 0;
+    const answers = [];
+    const choiceOrder = [];
+
+    const qText    = document.getElementById('qText');
+    const qChoices = document.getElementById('qChoices');
+    const qExplain = document.getElementById('qExplain');
+    const prevBtn  = document.getElementById('prevBtn');
+    const nextBtn  = document.getElementById('nextBtn');
+
+    function shuffle(array) {
+      const copy = [...array];
+      for (let i = copy.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [copy[i], copy[j]] = [copy[j], copy[i]];
+      }
+      return copy;
+    }
+
+    
+    function showQuestion() {
+      const q = questions[idx];
+      if (answers[idx] === undefined) {
+        answers[idx] = null;                   // preserve answer or null
+      }
+      const order = choiceOrder[idx] || (choiceOrder[idx] =
+        shuffle(Array.from({ length: q.choices.length }, (_, i) => i)));
+      qText.textContent = '';
+
+      const numberSpan = document.createElement('span');
+      numberSpan.className = 'question-number';
+      numberSpan.textContent = `Question ${idx + 1}`;
+
+      const textSpan = document.createElement('span');
+      textSpan.className = 'question-text';
+      textSpan.textContent = q.q;
+
+      qText.appendChild(numberSpan);
+      qText.appendChild(textSpan);
+      qChoices.innerHTML  = '';
+      qExplain.textContent = '';
+      qExplain.className = 'explanation';
+
+      order.forEach((originalIndex, displayIdx) => {
+        const choice = q.choices[originalIndex];
+        const label = document.createElement('label');
+        label.dataset.choiceIndex = originalIndex;
+        label.tabIndex = 0;
+
+        const letter = String.fromCharCode(97 + displayIdx); // a, b, c...
+        label.appendChild(document.createTextNode(`${letter}) ${choice}`));
+
+        const selectChoice = () => {
+          answers[idx] = originalIndex;
+          [...qChoices.children].forEach((child) => child.classList.remove('selected'));
+          label.classList.add('selected');
+          showExplanation();
+        };
+
+        label.addEventListener('click', selectChoice);
+        label.addEventListener('keypress', (event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            selectChoice();
+          }
+        });
+
+        if (answers[idx] === originalIndex) {
+          label.classList.add('selected');
+        }
+        qChoices.appendChild(label);
+      });
+
+      prevBtn.disabled = (idx === 0);
+      nextBtn.disabled = (idx === questions.length - 1);
+
+      if (answers[idx] !== null && answers[idx] !== undefined) {
+        showExplanation();
+      }
+    }
+
+    function showExplanation() {
+      const q    = questions[idx];
+      const ans  = answers[idx];
+      if (ans === null || ans === undefined) return;
+
+      const isCorrect = ans === q.answer;
+      const distractorExplain = q.why_others_are_not_correct ? q.why_others_are_not_correct[ans] : '';
+      const baseExplain = q.explain || '';
+
+      let message = '';
+      if (isCorrect) {
+        message = baseExplain ? 'Correct. ' + baseExplain : 'Correct!';
+      } else if (distractorExplain) {
+        message = 'Not quite. ' + distractorExplain;
+      } else if (baseExplain) {
+        message = 'Not quite. ' + baseExplain;
+      } else {
+        message = 'Not quite.';
+      }
+
+      qExplain.textContent = message;
+      qExplain.classList.toggle('correct', isCorrect);
+      qExplain.classList.toggle('wrong', !isCorrect);
+    }
+
+    prevBtn.addEventListener('click', () => {
+      if (idx > 0) {
+        idx--; showQuestion();
+      }
+    });
+
+    nextBtn.addEventListener('click', () => {
+      if (idx < questions.length - 1) {
+        idx++; showQuestion();
+      }
+    });
+
+    showQuestion();
+  </script>
+
+</body>
+</html>
